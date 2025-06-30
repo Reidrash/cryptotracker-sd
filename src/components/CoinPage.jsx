@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useState } from "react";
 import { useParams } from "react-router-dom"; //id de la moneda desde la URL
 import { CryptoContext } from "../context/CryptoContext"; //Proporciona la moneda actual
 import AreaChart from "../components/AreaChart"; //Para el grafico de precios
+import AreaChartMulti from "../components/AreaChartMulti";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import LinearRegressionChart from "../components/LinearRegressionChart";
 import PriceCalculator from "../components/PriceCalculator";
@@ -40,6 +41,10 @@ const CoinPage = () => {
   const [prices, setPrices] = useState({});
   const [prevPrices, setPrevPrices] = useState({});
   const [changes, setChanges] = useState({});
+  const [selectedSymbols, setSelectedSymbols] = useState([
+    cryptoId.toUpperCase(),
+  ]);
+  const [allCharts, setAllCharts] = useState({});
 
   const { currentCurrency } = useContext(CryptoContext); //Moneda actual
 
@@ -144,6 +149,35 @@ const CoinPage = () => {
     };
   }
 
+  // Permite seleccionar/deseleccionar monedas para superponer
+  const handleSymbolToggle = (symbol) => {
+    setSelectedSymbols((prev) =>
+      prev.includes(symbol)
+        ? prev.filter((s) => s !== symbol)
+        : [...prev, symbol]
+    );
+  };
+
+  // Fetch datos históricos para todas las seleccionadas
+  useEffect(() => {
+    const fetchAll = async () => {
+      const newCharts = {};
+      for (const symbol of selectedSymbols) {
+        const symbolParam = symbol === "HYPE" ? "HP" : symbol;
+        try {
+          const res = await fetch(
+            `http://35.239.176.185/cripto/data?symbol=${symbolParam}`
+          );
+          if (res.ok) {
+            newCharts[symbol] = await res.json();
+          }
+        } catch (e) {}
+      }
+      setAllCharts(newCharts);
+    };
+    fetchAll();
+  }, [selectedSymbols, period]);
+
   if (error)
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
@@ -207,17 +241,36 @@ const CoinPage = () => {
             <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-600/20 to-cyan-500/20 rounded-lg blur opacity-30 group-hover:opacity-50 transition duration-300 -z-10" />
           </div>
         </div>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {allowedCryptos.map((c) => (
+            <button
+              key={c.symbol}
+              onClick={() => handleSymbolToggle(c.symbol)}
+              className={`px-3 py-1 rounded-full border text-sm transition-all duration-200 ${
+                selectedSymbols.includes(c.symbol)
+                  ? "bg-emerald-500/30 border-emerald-400 text-emerald-100"
+                  : "bg-gray-700/40 border-gray-500 text-gray-300 hover:bg-emerald-500/10 hover:border-emerald-400"
+              }`}
+            >
+              {c.symbol}
+            </button>
+          ))}
+        </div>
         <div className="h-64 md:h-80 ">
-          <AreaChart
-            historicalData={filterChartDataByHours(chartData, period)}
-            currencySymbol={"$"}
+          <AreaChartMulti
+            selectedSymbols={selectedSymbols}
+            allChartData={allCharts}
+            filterChartDataByHours={filterChartDataByHours}
+            period={period}
           />
         </div>
         <div className="mb-6">
           <h2 className="text-lg font-semibold text-emerald-400/90 mb-2">
             Regresión lineal
           </h2>
-          <LinearRegressionChart historicalData={filterChartDataByHours(chartData, period)} />
+          <LinearRegressionChart
+            historicalData={filterChartDataByHours(chartData, period)}
+          />
         </div>
       </div>
 
