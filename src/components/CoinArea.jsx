@@ -29,6 +29,10 @@ const CoinArea = () => {
   const [prices, setPrices] = useState({});
   const [prevPrices, setPrevPrices] = useState({});
   const [changes, setChanges] = useState({});
+  const [dailyChanges, setDailyChanges] = useState({});
+  const [changeMode, setChangeMode] = useState("1min");
+
+
 
   // Fetch precios y calcula cambios
   const fetchPrices = async () => {
@@ -41,6 +45,38 @@ const CoinArea = () => {
       // Manejo simple de error
     }
   };
+
+  const fetch24hChanges = async () => {
+    const changesMap = {};
+
+    for (const { symbol } of allowedCryptos) {
+      const key = symbol === "HYPE" ? "HP" : symbol;
+      try {
+        const res = await fetch(`http://35.239.176.185/cripto/data?symbol=${key}`);
+        const data = await res.json();
+
+        const entries = Object.entries(data);
+
+        if (entries.length >= 2) {
+          // Ordenamos por fecha ascendente
+          const sorted = entries.sort(([a], [b]) => a.localeCompare(b));
+
+          const firstPrice = parseFloat(sorted[0][1]);
+          const lastPrice = parseFloat(sorted[sorted.length - 1][1]);
+
+          const change = ((lastPrice - firstPrice) / firstPrice) * 100;
+          changesMap[key] = change;
+        } else {
+          changesMap[key] = 0;
+        }
+      } catch (e) {
+        changesMap[key] = 0;
+      }
+    }
+
+    setDailyChanges(changesMap);
+  };
+
 
   // Fetch inicial y cada minuto
   useEffect(() => {
@@ -66,6 +102,20 @@ const CoinArea = () => {
     });
     setChanges(newChanges);
   }, [prices, prevPrices]);
+
+
+  //fetch para el cambio porcentual
+  useEffect(() => {
+    fetch24hChanges();
+  }, []);
+
+  //Ordenar las criptomonedas
+  const sortedCryptos = [...allowedCryptos].sort((a, b) => {
+    const priceA = parseFloat(prices[a.symbol === "HYPE" ? "HP" : a.symbol] || 0);
+    const priceB = parseFloat(prices[b.symbol === "HYPE" ? "HP" : b.symbol] || 0);
+    return priceB - priceA;
+  });
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-900/95 to-gray-900/90 text-white px-4 sm:px-[5%] py-6 md:py-10 relative z-0">
@@ -101,17 +151,32 @@ const CoinArea = () => {
         </p>
       </div>
 
+      <div className="flex justify-end mb-4">
+        <label className="mt-1 mr-2 text-sm text-gray-300/80">Mostrar cambio:</label>
+        <select
+          value={changeMode}
+          onChange={(e) => setChangeMode(e.target.value)}
+          className="bg-gray-800 text-white text-sm rounded px-2 py-1 border border-cyan-500 focus:outline-none"
+        >
+          <option value="1min">Último minuto</option>
+          <option value="24h">Últimas 24h</option>
+        </select>
+      </div>
+
       {/* HEADER */}
       <div className="grid grid-cols-4 gap-4 text-sm py-4 px-4 mb-2 bg-gray-800/40 backdrop-blur-lg rounded-xl border border-emerald-500/20">
         <p className="text-emerald-400/90">Posición</p>
         <p className="text-cyan-400/90">Nombre</p>
         <p className="text-cyan-400/90">Precio (USD)</p>
-        <p className="text-center">Cambio 1min</p>
+        <p className="text-center">
+          Cambio {changeMode === "1min" ? "1min" : "24h"}
+        </p>
+
       </div>
 
       {/* LISTA DE CRYPTOS */}
       <div className="space-y-3 relative z-10">
-        {allowedCryptos.map(({ symbol, name, icon }, idx) => {
+        {sortedCryptos.map(({ symbol, name, icon }, idx) => {
           // Para HYPE, usa el valor de HP en el objeto de precios y cambios
           const priceKey = symbol === "HYPE" ? "HP" : symbol;
           return (
@@ -146,16 +211,23 @@ const CoinArea = () => {
                 </span>
                 <div
                   className={`text-center px-2 py-1 rounded-full text-sm lg:text-base ${
-                    changes[priceKey] > 0
+                    (changeMode === "24h" ? dailyChanges[priceKey] : changes[priceKey]) > 0
                       ? "bg-emerald-500/20 text-emerald-400"
-                      : changes[priceKey] < 0
+                      : (changeMode === "24h" ? dailyChanges[priceKey] : changes[priceKey]) < 0
                       ? "bg-red-500/20 text-red-400"
                       : "bg-gray-500/20 text-gray-300"
                   }`}
                 >
-                  {changes[priceKey] > 0 ? "▲" : changes[priceKey] < 0 ? "▼" : ""}
-                  {Math.abs(changes[priceKey] || 0).toFixed(2)}%
+                  {(changeMode === "24h" ? dailyChanges[priceKey] > 0 : changes[priceKey] > 0)
+                    ? "▲"
+                    : (changeMode === "24h" ? dailyChanges[priceKey] < 0 : changes[priceKey] < 0)
+                    ? "▼"
+                    : ""}
+                  {Math.abs(
+                    changeMode === "24h" ? dailyChanges[priceKey] || 0 : changes[priceKey] || 0
+                  ).toFixed(2)}%
                 </div>
+
               </div>
             </Link>
           );
