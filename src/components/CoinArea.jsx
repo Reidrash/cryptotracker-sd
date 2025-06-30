@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { resilientFetch } from "../utils/fetchWithFallback";
 import ADAIcon from "../assets/ADA.png";
 import ETHIcon from "../assets/ethereum.png";
 import XRPIcon from "../assets/XRP.png";
@@ -10,6 +11,7 @@ import BTCIcon from "../assets/Bitcoin.svg.png";
 import BCHIcon from "../assets/Bitcoin_Cash.png";
 import TRXIcon from "../assets/TRX.png";
 import HYPEIcon from "../assets/HYPE.png";
+
 
 // Diccionario de símbolos válidos y sus nombres
 const allowedCryptos = [
@@ -37,7 +39,7 @@ const CoinArea = () => {
   // Fetch precios y calcula cambios
   const fetchPrices = async () => {
     try {
-      const res = await fetch("http://35.239.176.185/cripto/update");
+      const res = await resilientFetch("/cripto/update");
       const data = await res.json();
       setPrevPrices(prices); // Guarda los precios previos (antes de actualizar)
       setPrices(data);
@@ -52,7 +54,7 @@ const CoinArea = () => {
     for (const { symbol } of allowedCryptos) {
       const key = symbol === "HYPE" ? "HP" : symbol;
       try {
-        const res = await fetch(`http://35.239.176.185/cripto/data?symbol=${key}`);
+        const res = await resilientFetch(`/cripto/data?symbol=${key}`);
         const data = await res.json();
 
         const entries = Object.entries(data);

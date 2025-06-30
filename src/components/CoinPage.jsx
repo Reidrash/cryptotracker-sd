@@ -4,6 +4,8 @@ import { CryptoContext } from "../context/CryptoContext"; //Proporciona la moned
 import AreaChart from "../components/AreaChart"; //Para el grafico de precios
 import AreaChartMulti from "../components/AreaChartMulti";
 import { ArrowDown, ArrowUp } from "lucide-react";
+import { resilientFetch } from "../utils/fetchWithFallback";
+
 import LinearRegressionChart from "../components/LinearRegressionChart";
 import PriceCalculator from "../components/PriceCalculator";
 import ADAIcon from "../assets/ADA.png";
@@ -56,7 +58,7 @@ const CoinPage = () => {
   // Fetch precios actuales y cambios por minuto
   const fetchPrices = async () => {
     try {
-      const res = await fetch("http://35.239.176.185/cripto/update");
+      const res = await resilientFetch("/cripto/update");
       const data = await res.json();
       setPrevPrices(prices);
       setPrices(data);
@@ -93,9 +95,8 @@ const CoinPage = () => {
       try {
         const symbolParam =
           cryptoId.toUpperCase() === "HYPE" ? "HP" : cryptoId.toUpperCase();
-        const chartRes = await fetch(
-          `http://35.239.176.185/cripto/data?symbol=${symbolParam}`
-        );
+        const chartRes = await resilientFetch(`/cripto/data?symbol=${symbolParam}`);
+
         if (!chartRes.ok)
           throw new Error(`Error fetching chart data: ${chartRes.statusText}`);
         setChartData(await chartRes.json());
@@ -165,9 +166,7 @@ const CoinPage = () => {
       for (const symbol of selectedSymbols) {
         const symbolParam = symbol === "HYPE" ? "HP" : symbol;
         try {
-          const res = await fetch(
-            `http://35.239.176.185/cripto/data?symbol=${symbolParam}`
-          );
+          const res = await resilientFetch(`/cripto/data?symbol=${symbolParam}`);
           if (res.ok) {
             newCharts[symbol] = await res.json();
           }
