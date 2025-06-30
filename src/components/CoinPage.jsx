@@ -5,83 +5,101 @@ import AreaChart from "../components/AreaChart"; //Para el grafico de precios
 import { ArrowDown, ArrowUp } from "lucide-react";
 import LinearRegressionChart from "../components/LinearRegressionChart";
 import PriceCalculator from "../components/PriceCalculator";
+import ADAIcon from "../assets/ADA.png";
+import ETHIcon from "../assets/ethereum.png";
+import XRPIcon from "../assets/XRP.png";
+import DOGEIcon from "../assets/DOGE.png";
+import LINKIcon from "../assets/chainlink-new-logo.png";
+import SOLIcon from "../assets/SOL.png";
+import BTCIcon from "../assets/Bitcoin.svg.png";
+import BCHIcon from "../assets/Bitcoin_Cash.png";
+import TRXIcon from "../assets/TRX.png";
+import HYPEIcon from "../assets/HYPE.png";
 
-// Diccionario de símbolos cortos a nombres largos de CoinGecko
-const symbolToCoinGeckoId = {
-  ADA: "cardano",
-  ETH: "ethereum",
-  XRP: "ripple",
-  DOGE: "dogecoin",
-  LINK: "chainlink",
-  SOL: "solana",
-  BTC: "bitcoin",
-  BCH: "bitcoin-cash",
-  TRX: "tron",
-  HP: "hector-dao", // HP es un ejemplo, revisa el id real en CoinGecko si es necesario
-};
+// Diccionario de símbolos válidos y sus nombres e iconos locales
+const allowedCryptos = [
+  { symbol: "ADA", name: "Cardano", icon: ADAIcon },
+  { symbol: "ETH", name: "Ethereum", icon: ETHIcon },
+  { symbol: "XRP", name: "XRP", icon: XRPIcon },
+  { symbol: "DOGE", name: "Dogecoin", icon: DOGEIcon },
+  { symbol: "LINK", name: "Chainlink", icon: LINKIcon },
+  { symbol: "SOL", name: "Solana", icon: SOLIcon },
+  { symbol: "BTC", name: "Bitcoin", icon: BTCIcon },
+  { symbol: "BCH", name: "Bitcoin Cash", icon: BCHIcon },
+  { symbol: "TRX", name: "Tron", icon: TRXIcon },
+  { symbol: "HYPE", name: "Hyperliquid", icon: HYPEIcon },
+];
 
 //Pagina de detalles de criptomonedas individuales
 
 const CoinPage = () => {
   const { cryptoId } = useParams();
-  const [coinDetails, setCoinDetails] = useState(null); //Informacion de la moneda
   const [chartData, setChartData] = useState(null); //Datos historicos
   const [period, setPeriod] = useState("10"); //Periodo seleccionado
   const [error, setError] = useState(null); //Manejo de errores
+  const [prices, setPrices] = useState({});
+  const [prevPrices, setPrevPrices] = useState({});
+  const [changes, setChanges] = useState({});
 
   const { currentCurrency } = useContext(CryptoContext); //Moneda actual
 
-  if (!cryptoId)
-    return (
-      <div className=" min-h-screen flex items-center justify-center bg-gray-900 text-white">
-        <p>Error: No cryptocurrency ID provided.</p>
-      </div>
-    );
-  //Opciones para la peticion HTTP a la API
-  const requestOptions = {
-    method: "GET",
-    headers: {
-      accept: "application/json",
-    },
+  // Busca info local de la cripto
+  const cryptoInfo = allowedCryptos.find(
+    (c) => c.symbol === cryptoId.toUpperCase()
+  );
+
+  // Fetch precios actuales y cambios por minuto
+  const fetchPrices = async () => {
+    try {
+      const res = await fetch("http://35.239.176.185/cripto/update");
+      const data = await res.json();
+      setPrevPrices(prices);
+      setPrices(data);
+    } catch (e) {}
   };
 
-  //Logica de obtencion de datos
+  // Fetch inicial y cada minuto
   useEffect(() => {
-    const fetchData = async () => {
+    fetchPrices();
+    const interval = setInterval(fetchPrices, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Calcular cambios porcentuales
+  useEffect(() => {
+    const newChanges = {};
+    allowedCryptos.forEach(({ symbol }) => {
+      const priceKey = symbol === "HYPE" ? "HP" : symbol;
+      const prev = parseFloat(prevPrices[priceKey]);
+      const curr = parseFloat(prices[priceKey]);
+      if (prev && curr) {
+        newChanges[priceKey] = ((curr - prev) / prev) * 100;
+      } else {
+        newChanges[priceKey] = 0;
+      }
+    });
+    setChanges(newChanges);
+  }, [prices, prevPrices]);
+
+  // Fetch datos históricos para la gráfica
+  useEffect(() => {
+    const fetchChart = async () => {
       setError(null);
       try {
-        // Obtén el id largo de CoinGecko usando el diccionario
-        const coinGeckoId =
-          symbolToCoinGeckoId[cryptoId.toUpperCase()] || cryptoId.toLowerCase();
-        //Se hace una peticion para obtener datos generales
-        const detailsRes = await fetch(
-          `https://api.coingecko.com/api/v3/coins/${coinGeckoId}`,
-          requestOptions
-        );
-        if (!detailsRes.ok)
-          throw new Error(
-            `Error fetching coin details: ${detailsRes.statusText}`
-          );
-
-        setCoinDetails(await detailsRes.json());
-        //Se hace una peticion para el grafico
+        const symbolParam =
+          cryptoId.toUpperCase() === "HYPE" ? "HP" : cryptoId.toUpperCase();
         const chartRes = await fetch(
-          `http://35.239.176.185/cripto/data?symbol=${cryptoId.toUpperCase()}`,
-          requestOptions
+          `http://35.239.176.185/cripto/data?symbol=${symbolParam}`
         );
-
         if (!chartRes.ok)
           throw new Error(`Error fetching chart data: ${chartRes.statusText}`);
         setChartData(await chartRes.json());
       } catch (err) {
-        console.error(err);
         setError(err.message);
       }
     };
-    fetchData();
-    //Se ejecuta cada vez que se cambia de moneda, se cambia de criptomoneda o se cambia el
-    //periodo del grafico
-  }, [currentCurrency, cryptoId, period]);
+    fetchChart();
+  }, [cryptoId, period]);
 
   // Filtra los datos de chartData según las horas seleccionadas
   function filterChartDataByHours(chartData, hours) {
@@ -128,54 +146,46 @@ const CoinPage = () => {
 
   if (error)
     return (
-      <div className=" min-h-screen flex items-center justify-center bg-gray-900 text-white">
+      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
         <p>{error}</p>
       </div>
     );
 
-  if (!coinDetails || !chartData)
+  if (!cryptoInfo || !chartData)
     return (
-      <div className=" min-h-screen flex items-center justify-center bg-gray-900">
-        <div className=" animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500" />
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500" />
       </div>
     );
 
+  // Para HYPE, usa el valor de HP
+  const priceKey =
+    cryptoId.toUpperCase() === "HYPE" ? "HP" : cryptoId.toUpperCase();
+  const currentPrice = parseFloat(prices[priceKey] || 0);
+  const change = changes[priceKey] || 0;
+
   return (
-    <div
-      className=" min-h-screen bg-gradient-to-br from-gray-900 via-gray-900/95 to-gray-900/90 text-white
-         px-4 sm:px-[5%] md:px-[8%] py-6"
-    >
-      <div
-        className=" flex flex-col items-center md:flex-row gap-4 mb-6 bg-gray-800/30 backdrop-blur-lg p-4 rounded-xl
-             border border-emerald-500/20 "
-      >
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-900/95 to-gray-900/90 text-white px-4 sm:px-[5%] md:px-[8%] py-6">
+      <div className="flex flex-col items-center md:flex-row gap-4 mb-6 bg-gray-800/30 backdrop-blur-lg p-4 rounded-xl border border-emerald-500/20 ">
         <img
-          src={coinDetails.image?.large}
-          alt={coinDetails.name}
-          className=" w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 p-1"
+          src={cryptoInfo.icon}
+          alt={cryptoInfo.name}
+          className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 p-1"
         />
-
-        <div className=" text-center md:text-left">
-          <h1
-            className=" text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400
-                         bg-clip-text text-transparent"
-          >
-            {coinDetails.name}
-
-            <span className=" text-xl md:text-2xl ml-2 text-cyan-400/80 inline-block mt-1">
-              ({coinDetails.symbol?.toUpperCase()})
+        <div className="text-center md:text-left">
+          <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+            {cryptoInfo.name}
+            <span className="text-xl md:text-2xl ml-2 text-cyan-400/80 inline-block mt-1">
+              ({cryptoInfo.symbol})
             </span>
           </h1>
-          <p className=" mt-1 text-sm text-gray-300/80">
-            Posicion: #{coinDetails.market_cap_rank}
-          </p>
         </div>
       </div>
 
-      <div className=" mb-6 bg-gray-800/30 backdrop-blur-md p-4 rounded-xl border border-emerald-500/20">
-        <div className=" flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2">
-          <h2 className=" text-lg font-semibold text-emerald-400/90">
-            Cambio de precio ({currentCurrency.symbol})
+      <div className="mb-6 bg-gray-800/30 backdrop-blur-md p-4 rounded-xl border border-emerald-500/20">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2">
+          <h2 className="text-lg font-semibold text-emerald-400/90">
+            Cambio de precio (USD)
           </h2>
           <div className="relative group flex items-center gap-2">
             <label htmlFor="hours" className="text-gray-300 text-sm">
@@ -194,175 +204,57 @@ const CoinPage = () => {
               className="w-20 px-2 py-1 rounded bg-gray-800 border border-emerald-500 text-white text-sm"
             />
             <span className="text-gray-400 text-xs">(1-24)</span>
-            <div
-              className="absolute -inset-0.5 bg-gradient-to-r from-emerald-600/20 to-cyan-500/20 rounded-lg
-               blur opacity-30 group-hover:opacity-50 transition duration-300 -z-10"
-            />
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-600/20 to-cyan-500/20 rounded-lg blur opacity-30 group-hover:opacity-50 transition duration-300 -z-10" />
           </div>
         </div>
-
-        <div className=" h-64 md:h-80 ">
+        <div className="h-64 md:h-80 ">
           <AreaChart
             historicalData={filterChartDataByHours(chartData, period)}
-            currencySymbol={currentCurrency.symbol}
+            currencySymbol={"$"}
           />
         </div>
-
         <div className="mb-6">
           <h2 className="text-lg font-semibold text-emerald-400/90 mb-2">
-            Regresion lineal
+            Regresión lineal
           </h2>
-          <LinearRegressionChart
-            historicalData={filterChartDataByHours(chartData, period)}
-          />
+          <LinearRegressionChart historicalData={filterChartDataByHours(chartData, period)} />
         </div>
       </div>
 
-      <div className=" mb-6 bg-gray-800/30 backdrop-blur-md p-4 rounded-xl border border-emerald-500/20">
-        {coinDetails && (
-          <PriceCalculator
-            currentPrice={
-              coinDetails.market_data.current_price[currentCurrency.name]
-            }
-            currencySymbol={currentCurrency.symbol}
-            cryptoSymbol={coinDetails.symbol}
-          />
-        )}
-      </div>
-
-      <div className=" space-y-3 md:hidden">
-        <div className=" bg-gray-800/30 backdrop-blur-md p-4 rounded-lg border border-emerald-500/20">
-          <div className=" flex justify-between items-center">
-            <span className=" text-sm text-cyan-400/80">Precio actual</span>
-            <span className=" text-lg font-bold text-emerald-400">
-              {currentCurrency.symbol}
-              {coinDetails.market_data.current_price[
-                currentCurrency.name
-              ].toLocaleString()}
-            </span>
-          </div>
+      <div className="mb-6 bg-gray-800/30 backdrop-blur-md p-4 rounded-xl border border-emerald-500/20 flex flex-col md:flex-row gap-4 items-center justify-center">
+        <div className="flex flex-col items-center justify-center">
+          <span className="text-sm text-cyan-400/80 mb-1">Precio actual</span>
+          <span className="text-2xl font-bold text-emerald-400">
+            $
+            {currentPrice.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 8,
+            })}
+          </span>
         </div>
-
-        <div className=" bg-gray-800/30 backdrop-blur-md p-4 rounded-lg border border-emerald-500/20">
-          <div className=" flex justify-between items-center">
-            <span className=" text-sm text-cyan-400/80">Valor total</span>
-            <span className=" text-lg font-bold text-emerald-400">
-              {currentCurrency.symbol}
-              {coinDetails.market_data.market_cap[
-                currentCurrency.name
-              ].toLocaleString()}
-            </span>
-          </div>
-        </div>
-
-        <div className=" bg-gray-800/30 backdrop-blur-md p-4 rounded-lg border border-emerald-500/20">
-          <div className=" space-y-3">
-            <div className=" flex justify-between items-center">
-              <span className=" text-sm text-cyan-400/80">24h High</span>
-              <div className="  flex items-center text-green-400">
-                <ArrowUp className="w-4 h-4 mr-1" />
-                {currentCurrency.symbol}
-                {coinDetails.market_data.high_24h[
-                  currentCurrency.name
-                ].toLocaleString()}
-              </div>
-            </div>
-            <div className=" flex justify-between items-center">
-              <span className=" text-sm text-cyan-400/80">24h Low</span>
-              <div className="  flex items-center text-red-400">
-                <ArrowDown className="w-4 h-4 mr-1" />
-                {currentCurrency.symbol}
-                {coinDetails.market_data.low_24h[
-                  currentCurrency.name
-                ].toLocaleString()}
-              </div>
-            </div>
-          </div>
+        <div className="flex flex-col items-center justify-center">
+          <span className="text-sm text-cyan-400/80 mb-1">Cambio 1min</span>
+          <span
+            className={`text-2xl font-bold ${
+              change > 0
+                ? "text-emerald-400"
+                : change < 0
+                ? "text-red-400"
+                : "text-gray-300"
+            }`}
+          >
+            {change > 0 ? "▲" : change < 0 ? "▼" : ""}
+            {Math.abs(change).toFixed(2)}%
+          </span>
         </div>
       </div>
 
-      <div className=" hidden md:grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <div className=" bg-gray-800/30 backdrop-blur-md p-4 rounded-xl border border-emerald-500/20">
-          <h3 className=" text-sm text-cyan-400/80 mb-2">Precio Actual</h3>
-          <p className=" text-2xl font-bold text-emerald-400">
-            {currentCurrency.symbol}
-            {coinDetails.market_data.current_price[
-              currentCurrency.name
-            ].toLocaleString()}
-          </p>
-        </div>
-
-        <div className=" bg-gray-800/30 backdrop-blur-md p-4 rounded-xl border border-emerald-500/20">
-          <h3 className=" text-sm text-cyan-400/80 mb-2">Valor Total</h3>
-          <p className=" text-2xl font-bold text-emerald-400">
-            {currentCurrency.symbol}
-            {coinDetails.market_data.market_cap[
-              currentCurrency.name
-            ].toLocaleString()}
-          </p>
-        </div>
-
-        <div className=" bg-gray-800/30 backdrop-blur-md p-4 rounded-xl border border-emerald-500/20">
-          <h3 className=" text-sm text-cyan-400/80 mb-2">Rango de 24h</h3>
-          <div className=" flex justify-between items-center">
-            <div className=" flex items-center text-green-400">
-              <ArrowUp className=" w-5 h-5 mr-1" />
-              {currentCurrency.symbol}
-              {coinDetails.market_data.high_24h[
-                currentCurrency.name
-              ].toLocaleString()}
-            </div>
-            <div className=" flex items-center text-red-400">
-              <ArrowDown className=" w-5 h-5 text-red-400" />
-              {currentCurrency.symbol}
-              {coinDetails.market_data.low_24h[
-                currentCurrency.name
-              ].toLocaleString()}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className=" space-y-3 md:space-y-0 md:grid md:grid-cols-2 gap-4">
-        <div className=" bg-gray-800/30 backdrop-blur-md p-4 rounded-lg md:rounded-xl border border-emerald-500/20">
-          <div className=" flex justify-between items-center">
-            <span className=" text-sm md:text-base text-emerald-400/90">
-              Cambio (Ultimas 24h)
-            </span>
-            <div className=" flex items-center gap-2">
-              <span
-                className={`text-base md:text-lg ${
-                  coinDetails.market_data.price_change_percentage_24h > 0
-                    ? "text-green-400"
-                    : "text-red-400"
-                }`}
-              >
-                {coinDetails.market_data.price_change_percentage_24h.toFixed(2)}
-                %
-              </span>
-
-              {coinDetails.market_data.price_change_percentage_24h > 0 ? (
-                <ArrowUp className=" w-5 h-5 text-green-400" />
-              ) : (
-                <ArrowDown className=" w-5 h-5 text-red-400" />
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className=" bg-gray-800/30 backdrop-blur-md p-4 rounded-lg md:rounded-xl border border-emerald-500/20">
-          <div className=" flex justify-between items-center">
-            <span className=" text-sm md:text-base text-emerald-400/90">
-              Volumen (Ultimas 24h)
-            </span>
-            <span className=" text-lg md:text-xl text-cyan-400">
-              {currentCurrency.symbol}
-              {coinDetails.market_data.total_volume[
-                currentCurrency.name
-              ].toLocaleString()}
-            </span>
-          </div>
-        </div>
+      <div className="mb-6 bg-gray-800/30 backdrop-blur-md p-4 rounded-xl border border-emerald-500/20">
+        <PriceCalculator
+          currentPrice={currentPrice}
+          currencySymbol={"$"}
+          cryptoSymbol={cryptoInfo.symbol}
+        />
       </div>
     </div>
   );
